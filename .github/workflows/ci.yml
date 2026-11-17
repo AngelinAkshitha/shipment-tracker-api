@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build --no-restore -c Release
+
+      - name: Test
+        run: dotnet test --no-build -c Release --verbosity normal
+
+  docker:
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build -t shipment-tracker-api .
+
+      - name: Smoke test the container
+        run: |
+          docker run -d -p 8080:8080 --name api shipment-tracker-api
+          for i in $(seq 1 15); do
+            if curl -fs http://localhost:8080/health; then echo; echo "Container is healthy"; exit 0; fi
+            sleep 2
+          done
+          docker logs api
+          exit 1
